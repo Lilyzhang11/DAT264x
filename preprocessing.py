@@ -6,7 +6,7 @@ import csv
 root = 'data/processed/'
 
 # k-fold交叉验证
-fold = 2
+fold = 10
 
 
 def read_csv(file_path):

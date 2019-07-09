@@ -8,37 +8,40 @@ import numpy as np
 
 root = 'data/processed/'
 fold = 10
-train_bs = 20
-valid_bs = 20
+train_bs = 50
+valid_bs = 50
 num_epochs = 100
 max_N = 5
+lr_list = [3e-4, 3e-5, 3e-6, 3e-7]
 
 
 def func(label):
-    tmp = [0] * 3
+    num = [0] * 3
     for item in label:
-        tmp[item] += 1
-    return np.array(tmp).argmax()
+        num[item] += 1
+    return np.array(num).argmax()
 
 
 if __name__ == '__main__':
 
-    '''
     os.system('rm -rf result/')
 
     acc_list = []
     for i in range(fold):
+        print('%dth fold:'%i)
         train_file = root+'%d-fold/train_%d.csv'%(fold, i)
         valid_file = root+'%d-fold/valid_%d.csv'%(fold, i)
         test_file = root+'submission_format.csv'
         output = 'result/%d/'%i
         acc, model = train(root+'train/', train_file, valid_file, output,
-                           train_bs, valid_bs, num_epochs, max_N)
+                           train_bs, valid_bs, num_epochs, max_N,
+                           lr_list)
         acc_list.append(acc)
         model.load(output+'best_model.pth')
         final_test(model, root+'test/', test_file, valid_bs, output)
+        print('')
     print('total accuracy:', sum(acc_list)/fold)
-    '''
+
     data = []
     for i in range(fold):
         data.append(read_csv('result/%d/result.csv'%i))

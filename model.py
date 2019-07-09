@@ -5,7 +5,7 @@ from preprocessing import read_csv
 
 class Model(object):
 
-    def __init__(self):
+    def __init__(self, lr):
         '''
         self.net = torch.nn.Sequential(
             torch.nn.Linear(128*173, 3),
@@ -13,9 +13,12 @@ class Model(object):
             # torch.nn.Linear(1024, 3)
         ).cuda()
         '''
-        self.net = get_model().cuda()
+        self.net = resnet18(3).cuda()
 
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=3e-4)
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
+
+    def reset_lr(self, lr):
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
 
     def train(self, inp, gt):
         inp, gt = inp.cuda(), gt.cuda()
@@ -26,6 +29,10 @@ class Model(object):
         loss.backward()
         self.optimizer.step()
         return loss.item()
+
+    def sparse_loss(self, y):
+        y_ = (y == y.max(dim=1, keepdim=True)[0]).float()
+        return (y - y_).pow(2).mean()
 
     def test(self, loader, label_file):
         self.net.eval()
@@ -62,9 +69,45 @@ class Model(object):
         self.net.load_state_dict(torch.load(path))
 
 
-def get_model():
-    model = torchvision.models.resnet101(True)
-    model.fc = torch.nn.Linear(in_features=2048, out_features=3, bias=True)
+def alexnet(k):
+    model = torchvision.models.alexnet(pretrained=True)
+    model.classifier[6] = torch.nn.Linear(in_features=4096, out_features=k, bias=True)
+    return model
+
+
+def resnet18(k):
+    model = torchvision.models.resnet18(pretrained=True)
+    model.fc = torch.nn.Linear(in_features=512, out_features=k, bias=True)
+    return model
+
+
+def resnet34(k):
+    model = torchvision.models.resnet34(pretrained=True)
+    model.fc = torch.nn.Linear(in_features=512, out_features=k, bias=True)
+    return model
+
+
+def resnet50(k):
+    model = torchvision.models.resnet50(pretrained=True)
+    model.fc = torch.nn.Linear(in_features=2048, out_features=k, bias=True)
+    return model
+
+
+def resnet101(k):
+    model = torchvision.models.resnet101(pretrained=True)
+    model.fc = torch.nn.Linear(in_features=2048, out_features=k, bias=True)
+    return model
+
+
+def resnet152(k):
+    model = torchvision.models.resnet152(pretrained=True)
+    model.fc = torch.nn.Linear(in_features=2048, out_features=k, bias=True)
+    return model
+
+
+def squeezenet1_1(k):
+    model = torchvision.models.squeezenet1_1(pretrained=True)
+    model.classifier[1] = torch.nn.Conv2d(512, k, kernel_size=(1,1), stride=(1,1))
     return model
 
 
