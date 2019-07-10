@@ -33,12 +33,18 @@ if __name__ == '__main__':
         valid_file = root+'%d-fold/valid_%d.csv'%(fold, i)
         test_file = root+'submission_format.csv'
         output = 'result/%d/'%i
+        '''
         acc, model = train(root+'train/', train_file, valid_file, output,
                            train_bs, valid_bs, num_epochs, max_N,
                            lr_list)
+        '''
+        acc, model = train(root, train_file, valid_file, output,
+                           train_bs, valid_bs, num_epochs, max_N,
+                           lr_list,
+                           root, test_file)
         acc_list.append(acc)
         model.load(output+'best_model.pth')
-        final_test(model, root+'test/', test_file, valid_bs, output)
+        final_test(model, root, test_file, valid_bs, output)
         print('')
     print('total accuracy:', sum(acc_list)/fold)
 

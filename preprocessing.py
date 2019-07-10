@@ -1,5 +1,6 @@
 import os
 import csv
+import random
 
 
 # 存放解压后的两个文件夹及两个.csv文件的目录
@@ -22,6 +23,8 @@ def read_csv(file_path):
 
 if __name__ == '__main__':
 
+    os.system('rm -rf data/processed/classified_by_label/')
+
     # 把类别为i(i=1,2,3)的图片复制到root/classified_by_label/i/下
     for i in range(3):
         os.makedirs(os.path.join(root, 'classified_by_label', str(i)), exist_ok=True)
@@ -30,7 +33,10 @@ if __name__ == '__main__':
         for idx, (file_id, accent) in enumerate(reader):
             if idx == 0:
                 continue
-            source_path = os.path.join(root, 'train', file_id+'.png')
+            if int(file_id) < 20000:
+                source_path = os.path.join(root, 'train', file_id+'.png')
+            else:
+                source_path = os.path.join(root, 'test', file_id+'.png')
             target_path = os.path.join(root, 'classified_by_label', accent, file_id+'.png')
             os.system('cp %s %s'%(source_path, target_path))
             print(idx)
@@ -41,6 +47,7 @@ if __name__ == '__main__':
         target_dir = os.path.join(root, 'classified_by_label', str(i))
         name_list = os.listdir(target_dir)
         name_list.sort()
+        # random.shuffle(name_list)
         image_name.append(name_list)
     size = len(image_name[0])
     os.makedirs(os.path.join(root, '%d-fold'%fold), exist_ok=True)
@@ -65,6 +72,7 @@ if __name__ == '__main__':
                 writer.writerow(item)
 
     # 验证
+    '''
     for i in range(fold):
         train_data = read_csv(os.path.join(root, '%d-fold'%fold, 'train_%d.csv'%i))
         valid_data = read_csv(os.path.join(root, '%d-fold'%fold, 'valid_%d.csv'%i))
@@ -74,3 +82,4 @@ if __name__ == '__main__':
         for i in range(len(data1)):
             assert(data1[i][0] == data2[i][0]), (data1[i][0], data2[i][0])
             assert(data1[i][1] == data2[i][1]), (data1[i][1], data2[i][1])
+    '''

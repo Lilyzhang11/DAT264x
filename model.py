@@ -20,11 +20,16 @@ class Model(object):
     def reset_lr(self, lr):
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
 
-    def train(self, inp, gt):
-        inp, gt = inp.cuda(), gt.cuda()
+    def train(self, inp, gt=None):
+        inp = inp.cuda()
         # inp = inp.view(-1, 128*173)
         out = self.net(inp)
-        loss = (out - gt).pow(2).mean()
+        if gt is None:
+            loss = self.sparse_loss(out)
+        else:
+            gt = gt.cuda()
+            # loss = (out - gt).pow(2).mean() + self.sparse_loss(out)
+            loss = (out - gt).pow(2).mean()
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()

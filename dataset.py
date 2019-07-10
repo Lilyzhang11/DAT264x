@@ -25,7 +25,10 @@ class Dataset(Ds):
         file_id, accent = self.label[idx]
 
         # 图片
-        img_name = os.path.join(self.img_dir, file_id+'.png')
+        if int(file_id) < 20000:
+            img_name = os.path.join(self.img_dir, 'train', file_id+'.png')
+        else:
+            img_name = os.path.join(self.img_dir, 'test', file_id+'.png')
         # img = cv2.imread(img_name, cv2.IMREAD_GRAYSCALE)
         img = cv2.imread(img_name)
         if self.train:

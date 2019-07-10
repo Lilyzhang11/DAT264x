@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 from dataset import Dataset
 from model import Model
 import time
+import torch
 
 
 def train(img_dir, train_file, valid_file, output,
@@ -46,13 +47,15 @@ def train(img_dir, train_file, valid_file, output,
         test_iter = iter(test_loader)
         while True:
             try:
+                # if torch.rand(1).item() < 0.5 or lr_idx == 0:
                 if True:
                     img, gt = next(train_iter)
+                    loss = model.train(img, gt)
                 else:
                     img, _ = next(test_iter)
+                    loss = model.train(img)
             except StopIteration:
                 break
-            loss = model.train(img, gt)
             print(epoch, idx, loss, end='\r')
             idx += 1
         print('')
