@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset as Ds
 import torchvision.transforms.functional as TF
 from PIL import Image
+import numpy as np
 
 
 class Dataset(Ds):
@@ -31,6 +32,7 @@ class Dataset(Ds):
             img_name = os.path.join(self.img_dir, 'test', file_id+'.png')
         # img = cv2.imread(img_name, cv2.IMREAD_GRAYSCALE)
         img = cv2.imread(img_name)
+        img = self.preprocessing(img)
         if self.train:
             img = self.augment(img)
         img = TF.to_tensor(img)
@@ -40,6 +42,15 @@ class Dataset(Ds):
         label[int(accent)] = 1.
 
         return img, label
+
+    def preprocessing(self, img):
+        # cv2.imwrite('src.png', img)
+        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+        img = cv2.filter2D(img, -1, kernel=kernel)
+        # cv2.imwrite('dst.png', img)
+        # while True:
+        #     pass
+        return img
 
     def augment(self, img):
         img = Image.fromarray(img)

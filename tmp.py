@@ -1,9 +1,8 @@
 import csv
 from preprocessing import read_csv
-import random
 
 
-root = 'save/result_score:0.8376/'
+root = 'save/result_score_0.8376/'
 
 data = []
 for i in range(10):

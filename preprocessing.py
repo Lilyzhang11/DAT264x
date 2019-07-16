@@ -1,6 +1,5 @@
 import os
 import csv
-import random
 
 
 # 存放解压后的两个文件夹及两个.csv文件的目录

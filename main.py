@@ -4,6 +4,11 @@ from preprocessing import read_csv
 import csv
 import os
 import numpy as np
+import torch
+
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+torch.manual_seed(1)
 
 
 root = 'data/processed/'
