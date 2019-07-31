@@ -1,128 +1,82 @@
 import os
+import time
+
 from torch.utils.data import DataLoader
+
 from dataset import Dataset
 from model import Model
-import time
-import torch
+from evaluate import final_test
 
 
 def train(img_dir, train_file, valid_file, output,
-          train_bs, valid_bs, num_epochs, max_N,
-          lr_list,
-          test_dir=None, test_file=None):
+          train_bs, num_workers,
+          num_epochs, max_N, lr_list,
+          augment=False, opt=None):
+    # opt在这个函数里仅表示数据增强的超参数
+
+    start = time.time()
+
+    # 创建保存结果的文件夹
     os.system('rm -rf %s'%output)
     os.makedirs(output)
-    train_set = Dataset(img_dir, train_file, True)
+
+    # 创建训练用的数据集和dataloader
+    train_set = Dataset(img_dir, train_file, augment, opt)
     train_loader = DataLoader(train_set, batch_size=train_bs, shuffle=True,
-                              num_workers=int(train_bs*1.5), pin_memory=True,
+                              num_workers=num_workers, pin_memory=True,
                               drop_last=True)
-    v_train_set = Dataset(img_dir, train_file)
-    v_loader_train = DataLoader(v_train_set, batch_size=valid_bs, shuffle=False,
-                                num_workers=int(valid_bs*1.5), pin_memory=True,
-                                drop_last=False)
-    valid_set = Dataset(img_dir, valid_file)
-    v_loader_valid = DataLoader(valid_set, batch_size=valid_bs, shuffle=False,
-                                num_workers=int(valid_bs*1.5), pin_memory=True,
-                                drop_last=False)
-    if test_dir is not None and test_file is not None:
-        test_set = Dataset(test_dir, test_file, True)
-        test_loader = DataLoader(test_set, batch_size=train_bs, shuffle=True,
-                                 num_workers=int(train_bs*1.5), pin_memory=True,
-                                 drop_last=True)
-    model = Model(lr_list[0])
-    lr_idx = 0
 
-    valid_acc_list = []
-    for epoch in range(num_epochs):
-        st = time.time()
-        # train
-        '''
-        for idx, (img, gt) in enumerate(train_loader):
-            loss = model.train(img, gt)
-            print(epoch, idx, loss, end='\r')
-            # break
-        '''
-        idx = 0
-        train_iter = iter(train_loader)
-        test_iter = iter(test_loader)
+    # 创建模型
+    model = Model(opt=opt)
+
+    epoch = 0
+    train_acc_list, valid_acc_list = [], []
+    for lr in lr_list:
+        # 调整学习率
+        model.reset_lr(lr)
+        print('set lr to %.6f'%lr)
+
+        # 每次调整学习率后，重新计算当前有多少个epoch准确率未上升
+        patience = 0
+
         while True:
-            try:
-                # if torch.rand(1).item() < 0.5 or lr_idx == 0:
-                if True:
-                    img, gt = next(train_iter)
-                    loss = model.train(img, gt)
-                else:
-                    img, _ = next(test_iter)
-                    loss = model.train(img)
-            except StopIteration:
+            st = time.time()
+
+            # 训练一个完整的epoch
+            for idx, (img, gt) in enumerate(train_loader):
+                loss = model.train(img, gt)
+                print(epoch, idx, loss, end='\r')
+            print('')
+
+            # 计算训练集和验证集的准确率
+            _, train_acc = final_test(model, img_dir, train_file)
+            _, valid_acc = final_test(model, img_dir, valid_file)
+
+            # 保存模型
+            model.save(os.path.join(output, 'latest_model.pth'))
+            if len(train_acc_list) == 0 or train_acc > max(train_acc_list):
+                model.save(os.path.join(output, 'best_model.pth'))
+
+            # 计算已经连续多少个epoch训练集的准确率没有上升了
+            if len(train_acc_list) == 0 or train_acc > max(train_acc_list):
+                patience = 0
+            else:
+                patience += 1
+
+            epoch += 1
+            train_acc_list.append(train_acc)
+            valid_acc_list.append(valid_acc)
+
+            et = time.time()
+            print('train:', train_acc, 'valid:', valid_acc, '%ds'%int(et-st))
+
+            if patience == max_N or epoch >= num_epochs:
                 break
-            print(epoch, idx, loss, end='\r')
-            idx += 1
-        print('')
-        # valid
-        _, train_acc = model.test(v_loader_train, train_file)
-        _, valid_acc = model.test(v_loader_valid, valid_file)
-        et = time.time()
-        print('train:', train_acc, 'valid:', valid_acc, '%ds'%int(et-st))
-        # save
-        model.save(output+'latest_model.pth')
-        if len(valid_acc_list) == 0 or valid_acc > max(valid_acc_list):
-            N = 0
-            model.save(output+'best_model.pth')
-        else:
-            N += 1
-            if N == max_N:
-                if lr_idx == len(lr_list)-1:
-                    break
-                else:
-                    N = 0
-                    lr_idx += 1
-                    model.load(output+'best_model.pth')
-                    model.reset_lr(lr_list[lr_idx])
-                    print('reset lr to %f'%lr_list[lr_idx])
-        valid_acc_list.append(valid_acc)
 
-    return max(valid_acc_list), model
+    avg_valid_acc = sum(valid_acc_list[-max_N:]) / max_N
+    print('average valid accuracy in last %d epochs:'%max_N, avg_valid_acc)
 
+    end = time.time()
+    print('time:', '%ds'%int(end - start))
 
-if __name__ == '__main__':
-
-    train_bs = 16
-    valid_bs = 16
-
-    num_epochs = 100
-
-    train_set = Dataset('data/processed/train/', 'data/processed/5-fold/train_0.csv')
-    train_loader = DataLoader(train_set, batch_size=train_bs, shuffle=True,
-                              num_workers=int(train_bs*1.5), pin_memory=True, drop_last=True)
-    train_test_loader = DataLoader(train_set, batch_size=valid_bs, shuffle=False,
-                                   num_workers=int(valid_bs*1.5), pin_memory=True, drop_last=False)
-    valid_set = Dataset('data/processed/train/', 'data/processed/5-fold/valid_0.csv')
-    valid_loader = DataLoader(valid_set, batch_size=valid_bs, shuffle=False,
-                              num_workers=int(valid_bs*1.5), pin_memory=True, drop_last=False)
-
-    model = Model()
-
-    valid_acc_list = []
-    for epoch in range(num_epochs):
-
-        for idx, (img, label) in enumerate(train_loader):
-            loss = model.train(img, label)
-            print(epoch, idx, loss)
-        print()
-
-        _, train_acc = model.test(train_test_loader, 'data/processed/5-fold/train_0.csv')
-        _, valid_acc = model.test(valid_loader, 'data/processed/5-fold/valid_0.csv')
-        print('%d epoch, train: %.4f, valid: %.4f'%(epoch, train_acc, valid_acc))
-
-        if len(valid_acc_list) == 0 or valid_acc > max(valid_acc_list):
-            N = 0
-            model.save('best_model.pth')
-        else:
-            N += 1
-            if N == 5:
-                break
-        valid_acc_list.append(valid_acc)
-        model.save('latest_model.pth')
-
-    print('train finished.')
+    return avg_valid_acc, model

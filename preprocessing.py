@@ -1,84 +1,73 @@
 import os
-import csv
+
+from utils import read_csv, write_csv
 
 
-# 存放解压后的两个文件夹及两个.csv文件的目录
-root = 'data/processed/'
+def classified_by_label(label_file):
+    # 将label_file按照类别进行分类
+    image_name = [[], [], []]
+    data = read_csv(label_file)
+    for file_id, accent in data:
+        image_name[int(accent)].append(file_id)
+    # 此时image_name的格式是：
+    # [['10000', ...], ['10001', ...], ['10002', ...]]
+    return image_name
 
-# k-fold交叉验证
-fold = 10
 
+def generate_k_fold(label_file, output_dir, fold):
+    # 用label_file进行fold次划分，用于交叉验证
+    # 每次划分，都有1/fold的样本作为验证集
+    # 划分后的train_*.csv和valid_*.csv保存在output_dir中
 
-def read_csv(file_path):
-    data = []
-    with open(file_path, 'r') as f:
-        reader = csv.reader(f)
-        for idx, (file_id, accent) in enumerate(reader):
-            if idx == 0:
-                continue
-            data.append([file_id, accent])
-    return data
+    image_name = classified_by_label(label_file)
+
+    # 1折的大小
+    size = len(image_name[0]) // fold
+
+    # 生成保存k-fold的.csv的文件夹
+    os.system('rm -rf %s'%output_dir)
+    os.makedirs(output_dir)
+
+    # 生成k-fold
+    for i in range(fold):
+        train_list, valid_list = [], []
+        for j in range(3):
+            for k, file_id in enumerate(image_name[j]):
+                if k in range(i * size, (i+1) * size):
+                    valid_list.append([file_id, str(j)])
+                else:
+                    train_list.append([file_id, str(j)])
+
+        write_csv(os.path.join(output_dir, 'train_%d.csv'%i), train_list)
+        write_csv(os.path.join(output_dir, 'valid_%d.csv'%i), valid_list)
 
 
 if __name__ == '__main__':
 
-    os.system('rm -rf data/processed/classified_by_label/')
+    def check_order(data):
+        image_name = [[], [], []]
+        for file_id, accent in data:
+            image_name[int(accent)].append(int(file_id))
+        for i in range(3):
+            for j in range(len(image_name[i]) - 1):
+                assert(image_name[i][j+1] > image_name[i][j])
 
-    # 把类别为i(i=1,2,3)的图片复制到root/classified_by_label/i/下
-    for i in range(3):
-        os.makedirs(os.path.join(root, 'classified_by_label', str(i)), exist_ok=True)
-    with open(os.path.join(root, 'train_labels.csv'), 'r') as f:
-        reader = csv.reader(f)
-        for idx, (file_id, accent) in enumerate(reader):
-            if idx == 0:
-                continue
-            if int(file_id) < 20000:
-                source_path = os.path.join(root, 'train', file_id+'.png')
-            else:
-                source_path = os.path.join(root, 'test', file_id+'.png')
-            target_path = os.path.join(root, 'classified_by_label', accent, file_id+'.png')
-            os.system('cp %s %s'%(source_path, target_path))
-            print(idx)
+    label_file = 'data/processed/train_labels.csv'
+    output_dir = 'data/processed/10-fold/'
+    fold = 10
 
-    # 生成5-fold的训练集和验证集
-    image_name = []
-    for i in range(3):
-        target_dir = os.path.join(root, 'classified_by_label', str(i))
-        name_list = os.listdir(target_dir)
-        name_list.sort()
-        # random.shuffle(name_list)
-        image_name.append(name_list)
-    size = len(image_name[0])
-    os.makedirs(os.path.join(root, '%d-fold'%fold), exist_ok=True)
-    for i in range(fold):
-        train_list = []
-        valid_list = []
-        for j in range(3):
-            for k in range(size):
-                if k in range(i * (size//fold), (i+1) * (size//fold)):
-                    valid_list.append([image_name[j][k][:-4], str(j)])
-                else:
-                    train_list.append([image_name[j][k][:-4], str(j)])
-        with open(os.path.join(root, '%d-fold'%fold, 'train_%d.csv'%i), 'w') as f:
-            writer = csv.writer(f)
-            writer.writerow(['file_id', 'accent'])
-            for item in train_list:
-                writer.writerow(item)
-        with open(os.path.join(root, '%d-fold'%fold, 'valid_%d.csv'%i), 'w') as f:
-            writer = csv.writer(f)
-            writer.writerow(['file_id', 'accent'])
-            for item in valid_list:
-                writer.writerow(item)
+    generate_k_fold(label_file, output_dir, fold)
 
-    # 验证
-    '''
-    for i in range(fold):
-        train_data = read_csv(os.path.join(root, '%d-fold'%fold, 'train_%d.csv'%i))
-        valid_data = read_csv(os.path.join(root, '%d-fold'%fold, 'valid_%d.csv'%i))
+    # 检查
+    for idx in range(fold):
+        train_data = read_csv(os.path.join(output_dir, 'train_%d.csv'%idx))
+        check_order(train_data)
+        valid_data = read_csv(os.path.join(output_dir, 'valid_%d.csv'%idx))
+        check_order(valid_data)
         data1 = train_data + valid_data
         data1.sort()
-        data2 = read_csv(os.path.join(root, 'train_labels.csv'))
+        data2 = read_csv(label_file)
+        assert(len(train_data) + len(valid_data) == len(data2))
         for i in range(len(data1)):
-            assert(data1[i][0] == data2[i][0]), (data1[i][0], data2[i][0])
-            assert(data1[i][1] == data2[i][1]), (data1[i][1], data2[i][1])
-    '''
+            assert(data1[i][0] == data2[i][0])
+            assert(data1[i][1] == data2[i][1])

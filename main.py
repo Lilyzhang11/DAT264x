@@ -1,70 +1,79 @@
-from train import train
-from evaluate import final_test
-from preprocessing import read_csv
-import csv
 import os
-import numpy as np
+import json
+
 import torch
 
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-torch.manual_seed(1)
-
-
-root = 'data/processed/'
-fold = 10
-train_bs = 50
-valid_bs = 50
-num_epochs = 100
-max_N = 5
-lr_list = [3e-4, 3e-5, 3e-6, 3e-7]
-
-
-def func(label):
-    num = [0] * 3
-    for item in label:
-        num[item] += 1
-    return np.array(num).argmax()
+from opt import create_opt
+from preprocessing import generate_k_fold
+from add_fake_label import add_fake_label
+from train import train
+from evaluate import final_test
+from utils import write_csv, vote
 
 
 if __name__ == '__main__':
 
-    os.system('rm -rf result/')
+    opt = create_opt()
 
-    acc_list = []
-    for i in range(fold):
-        print('%dth fold:'%i)
-        train_file = root+'%d-fold/train_%d.csv'%(fold, i)
-        valid_file = root+'%d-fold/valid_%d.csv'%(fold, i)
-        test_file = root+'submission_format.csv'
-        output = 'result/%d/'%i
-        '''
-        acc, model = train(root+'train/', train_file, valid_file, output,
-                           train_bs, valid_bs, num_epochs, max_N,
-                           lr_list)
-        '''
-        acc, model = train(root, train_file, valid_file, output,
-                           train_bs, valid_bs, num_epochs, max_N,
-                           lr_list,
-                           root, test_file)
+    # -------------------------------------------------------------------------
+    # 初始化
+    # -------------------------------------------------------------------------
+    # 指明使用第几块显卡
+    # 当前代码不支持无显卡环境
+    os.environ['CUDA_VISIBLE_DEVICES'] = opt['cuda']
+
+    # 设置随机数的种子
+    # 当前代码只使用了pytorch内的随机数
+    if opt['seed'] is not None:
+        torch.manual_seed(opt['seed'])
+
+    # 创建保存结果的目录
+    # 所有生成的文件都将存放在opt['out_dir']里
+    os.system('rm -rf %s'%opt['out_dir'])
+    os.makedirs(opt['out_dir'])
+
+    # 保存opt
+    # 便于复现实验结果
+    with open(os.path.join(opt['out_dir'], 'opt.json'), 'w') as f:
+        json.dump(opt, f)
+
+    # -------------------------------------------------------------------------
+    # 交叉验证
+    # -------------------------------------------------------------------------
+    # 准备交叉验证的.csv文件
+    generate_k_fold(opt['train_file'], opt['label_dir'], opt['fold'])
+    if opt['use_fake_label']:
+        add_fake_label(opt['fake_dir'], opt['label_dir'], opt['fold'])
+
+    # 训练
+    acc_list, result_list = [], []
+    for fold_idx in range(opt['fold']):
+        print('%dth fold:'%fold_idx)
+
+        # 准备路径
+        output = os.path.join(opt['out_dir'], str(fold_idx))
+        train_file = os.path.join(opt['label_dir'], 'train_%d.csv'%fold_idx)
+        valid_file = os.path.join(opt['label_dir'], 'valid_%d.csv'%fold_idx)
+
+        # 训练
+        acc, model = train(opt['train_dir'], train_file, valid_file, output,
+                           opt['train_bs'], opt['num_workers'], 
+                           opt['num_epochs'], opt['max_N'], opt['lr_list'],
+                           opt['augment'], opt)
         acc_list.append(acc)
-        model.load(output+'best_model.pth')
-        final_test(model, root, test_file, valid_bs, output)
-        print('')
-    print('total accuracy:', sum(acc_list)/fold)
 
-    data = []
-    for i in range(fold):
-        data.append(read_csv('result/%d/result.csv'%i))
-    result = []
-    for i in range(len(data[0])):
-        label = []
-        for j in range(fold):
-            label.append(int(data[j][i][1]))
-        label = func(label)
-        result.append([data[0][i][0], str(label)])
-    with open('result/final_result.csv', 'w') as f:
-        writer = csv.writer(f)
-        writer.writerow(['file_id', 'accent'])
-        for item in result:
-            writer.writerow(item)
+        # 保存测试结果
+        result, _ = final_test(model, opt['test_dir'], opt['test_file'])
+        result_list.append(result)
+        write_csv(os.path.join(output, 'result.csv'), result)
+
+        print('')
+
+    # 打印在验证集上的平均准确率
+    print('total accuracy:', sum(acc_list) / opt['fold'])
+
+    #投票
+    final_result = vote(result_list)
+
+    # 保存投票后的结果
+    write_csv(os.path.join(opt['out_dir'], 'final_result.csv'), final_result)
